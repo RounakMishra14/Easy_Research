@@ -1,195 +1,100 @@
-import os
-import sys
 import asyncio
-import requests
-import trafilatura
 import streamlit as st
 
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-from playwright.async_api import async_playwright
-
-
-if sys.platform.startswith("win"):
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-
-
-load_dotenv()
-
-SERPER_API_KEY = os.getenv("SERPER_API_KEY")
-
-
-def search_serper(query, num_results=10):
-    url = "https://google.serper.dev/search"
-
-    payload = {
-        "q": query,
-        "num": num_results
-    }
-
-    headers = {
-        "X-API-KEY": SERPER_API_KEY,
-        "Content-Type": "application/json"
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-
-    data = response.json()
-    return data.get("organic", [])
-
-
-def extract_with_trafilatura(url):
-    downloaded = trafilatura.fetch_url(url)
-
-    if not downloaded:
-        return None
-
-    text = trafilatura.extract(downloaded)
-
-    if text and len(text.strip()) > 200:
-        return text.strip()
-
-    return None
-
-
-async def extract_with_playwright(url):
-    browser = None
-
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-
-            page = await browser.new_page(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-            )
-
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(5000)
-
-            html = await page.content()
-
-            await browser.close()
-            browser = None
-
-        text = trafilatura.extract(html)
-
-        if text and len(text.strip()) > 200:
-            return text.strip()
-
-        soup = BeautifulSoup(html, "html.parser")
-
-        for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
-            tag.decompose()
-
-        text = soup.get_text(separator="\n")
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        cleaned_text = "\n".join(lines)
-
-        if len(cleaned_text) > 200:
-            return cleaned_text
-
-        return None
-
-    except Exception as e:
-        return f"EXTRACTION_ERROR: {type(e).__name__} - {repr(e)}"
-
-    finally:
-        if browser:
-            await browser.close()
-
-
-async def extract_content(url):
-    text = extract_with_trafilatura(url)
-
-    if text:
-        return text, "trafilatura"
-
-    text = await extract_with_playwright(url)
-
-    if text and not text.startswith("EXTRACTION_ERROR"):
-        return text, "playwright"
-
-    return None, text or "No content extracted"
-
-
-async def process_results(results):
-    extracted_data = []
-
-    for item in results:
-        title = item.get("title", "No title")
-        url = item.get("link", "")
-        snippet = item.get("snippet", "")
-
-        if not url:
-            continue
-
-        content, method = await extract_content(url)
-
-        extracted_data.append({
-            "title": title,
-            "url": url,
-            "snippet": snippet,
-            "content": content,
-            "method": method
-        })
-
-    return extracted_data
+from src.config import SERPER_API_KEY
+from src.serper_search import search_serper
+from src.web_extractor import extract_content
+from src.document_processor import process_extracted_content
 
 
 st.set_page_config(
-    page_title="Easy Answer - Web Content Extractor",
-    page_icon="🔎",
+    page_title="Easy Answer - Module Test",
+    page_icon="🧪",
     layout="wide"
 )
 
-st.title("🔎 Easy Answer - Web Content Extractor")
+st.title("🧪 Easy Answer - Module Testing App")
 
 st.write(
-    "Enter a query. The app will search using Serper API, take top 10 URLs, "
-    "extract webpage content, and display it directly."
+    "This app tests Serper search, webpage extraction, "
+    "LangChain document creation, and chunking."
 )
 
-query = st.text_input("Enter your search query")
+if SERPER_API_KEY:
+    st.success("SERPER_API_KEY loaded successfully.")
+else:
+    st.error("SERPER_API_KEY not found. Check your .env file.")
 
-num_results = st.slider("Number of URLs to fetch", min_value=1, max_value=10, value=10)
+query = st.text_input("Enter search query", value="latest AI agents")
 
-if st.button("Search and Extract"):
+num_results = st.slider(
+    "Number of URLs to test",
+    min_value=1,
+    max_value=10,
+    value=3
+)
+
+if st.button("Run Module Test"):
     if not SERPER_API_KEY:
-        st.error("SERPER_API_KEY not found. Please add it in your .env file.")
-    elif not query.strip():
-        st.warning("Please enter a query.")
-    else:
-        with st.spinner("Searching Serper API..."):
-            try:
-                results = search_serper(query, num_results)
-            except Exception as e:
-                st.error(f"Serper search failed: {e}")
-                st.stop()
+        st.stop()
 
-        st.success(f"Found {len(results)} search results.")
+    with st.spinner("Step 1: Searching with Serper..."):
+        results = search_serper(query, num_results)
 
-        with st.spinner("Extracting webpage content..."):
-            extracted_data = asyncio.run(process_results(results))
+    st.subheader("Step 1 Result: Serper Search")
+    st.write(f"Results returned after filtering: {len(results)}")
 
-        st.subheader("Extracted Results")
+    for idx, result in enumerate(results, start=1):
+        st.markdown(f"### {idx}. {result['title']}")
+        st.write(result["link"])
+        st.write(result["snippet"])
 
-        for idx, item in enumerate(extracted_data, start=1):
-            with st.expander(f"{idx}. {item['title']}", expanded=False):
-                st.write("**URL:**", item["url"])
-                st.write("**Snippet:**", item["snippet"])
-                st.write("**Extraction Method:**", item["method"])
+    st.divider()
 
-                if item["content"]:
-                    st.text_area(
-                        label="Extracted Content",
-                        value=item["content"],
-                        height=400,
-                        key=f"content_{idx}"
-                    )
-                else:
-                    st.error(f"Could not extract content. Reason: {item['method']}")
+    st.subheader("Step 2 + 3: Extract Content and Create Chunks")
+
+    for idx, result in enumerate(results, start=1):
+        st.markdown(f"## URL {idx}: {result['title']}")
+        st.write(result["link"])
+
+        with st.spinner(f"Extracting URL {idx}..."):
+            extracted_item = asyncio.run(
+                extract_content(
+                    url=result["link"],
+                    title=result["title"],
+                    snippet=result["snippet"]
+                )
+            )
+
+        if extracted_item["content"]:
+            st.success(
+                f"Extraction successful using: "
+                f"{extracted_item['extraction_method']}"
+            )
+
+            st.text_area(
+                "Extracted Content Preview",
+                extracted_item["content"][:3000],
+                height=300,
+                key=f"content_{idx}"
+            )
+
+            chunks = process_extracted_content(extracted_item)
+
+            st.success(f"Chunking successful. Total chunks created: {len(chunks)}")
+
+            if chunks:
+                st.write("First chunk metadata:")
+                st.json(chunks[0].metadata)
+
+                st.text_area(
+                    "First Chunk Preview",
+                    chunks[0].page_content[:1500],
+                    height=250,
+                    key=f"chunk_{idx}"
+                )
+
+        else:
+            st.error("Content extraction failed for this URL.")
+
+        st.divider()
