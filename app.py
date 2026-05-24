@@ -5,7 +5,20 @@ from src.config import SERPER_API_KEY
 from src.serper_search import search_serper
 from src.web_extractor import extract_content
 from src.document_processor import process_extracted_content
-from src.token_utils import get_chunk_token_report
+#from src.token_utils import get_chunk_token_report #(Token Size ~ Chunk size comparation)
+
+from datetime import datetime
+
+from src.history_manager import (
+    create_topic_folder,
+    save_metadata,
+    list_research_history
+)
+
+from src.vector_store import (
+    create_and_save_vector_store,
+    load_vector_store
+)
 
 
 st.set_page_config(
@@ -15,6 +28,27 @@ st.set_page_config(
 )
 
 st.title("🧪 Easy Answer - Module Testing App")
+
+st.sidebar.header("Research History")
+
+history = list_research_history()
+
+if history:
+    selected_history = st.sidebar.selectbox(
+        "Previous searches",
+        options=history,
+        format_func=lambda x: f"{x['topic']} | {x['created_at']}"
+    )
+
+    if st.sidebar.button("Load Selected Vector DB"):
+        vector_store = load_vector_store(selected_history["folder_path"])
+        st.session_state["vector_store"] = vector_store
+        st.session_state["selected_history"] = selected_history
+
+        st.sidebar.success("Vector DB loaded successfully.")
+
+else:
+    st.sidebar.info("No previous research history found.")
 
 st.write(
     "This app tests Serper search, webpage extraction, "
@@ -38,6 +72,9 @@ num_results = st.slider(
 if st.button("Run Module Test"):
     if not SERPER_API_KEY:
         st.stop()
+
+    all_chunks = []
+    successful_documents = []
 
     with st.spinner("Step 1: Searching with Serper..."):
         results = search_serper(query, num_results)
@@ -84,11 +121,15 @@ if st.button("Run Module Test"):
 
             st.success(f"Chunking successful. Total chunks created: {len(chunks)}")
 
-            token_report_df = get_chunk_token_report(chunks)
+            all_chunks.extend(chunks)
+            successful_documents.append(extracted_item)
+
+            #Chunk Size ~ Token size comparation:-
+            '''token_report_df = get_chunk_token_report(chunks)
 
             st.subheader("Chunk Token Report")
             st.dataframe(token_report_df)
-            
+
             st.write("Token Summary")
             st.json({
                 "total_chunks": len(chunks),
@@ -96,7 +137,7 @@ if st.button("Run Module Test"):
                 "max_tokens": int(token_report_df["token_count"].max()),
                 "avg_tokens": round(float(token_report_df["token_count"].mean()), 2),
                 "chunks_above_512": int((token_report_df["token_count"] > 512).sum())
-            })
+            })'''
 
             if chunks:
                 st.write("First chunk metadata:")
@@ -113,3 +154,42 @@ if st.button("Run Module Test"):
             st.error("Content extraction failed for this URL.")
 
         st.divider()
+
+    st.session_state["all_chunks"] = all_chunks
+    st.session_state["successful_documents"] = successful_documents
+    st.session_state["query"] = query
+
+    st.success(
+        f"Processing completed. Total chunks collected from all URLs: {len(all_chunks)}"
+    )
+
+
+if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
+
+    if st.button("Create and Save Embeddings"):
+        with st.spinner("Creating embeddings and saving FAISS vector store..."):
+
+            topic_folder = create_topic_folder(st.session_state["query"])
+
+            vector_store = create_and_save_vector_store(
+                chunks=st.session_state["all_chunks"],
+                save_path=topic_folder
+            )
+
+            metadata = {
+                "topic": st.session_state["query"],
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "total_chunks": len(st.session_state["all_chunks"]),
+                "total_sources": len(st.session_state["successful_documents"]),
+                "embedding_model": "BAAI/bge-base-en-v1.5",
+                "vector_store_type": "FAISS",
+                "storage_path": topic_folder
+            }
+
+            save_metadata(topic_folder, metadata)
+
+            st.session_state["vector_store"] = vector_store
+
+            st.success("Embeddings created and saved successfully.")
+            st.code(topic_folder)
+            st.rerun()
