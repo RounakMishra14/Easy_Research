@@ -5,6 +5,7 @@ from src.config import SERPER_API_KEY
 from src.serper_search import search_serper
 from src.web_extractor import extract_content
 from src.document_processor import process_extracted_content
+from src.token_utils import get_chunk_token_report
 
 
 st.set_page_config(
@@ -82,6 +83,20 @@ if st.button("Run Module Test"):
             chunks = process_extracted_content(extracted_item)
 
             st.success(f"Chunking successful. Total chunks created: {len(chunks)}")
+
+            token_report_df = get_chunk_token_report(chunks)
+
+            st.subheader("Chunk Token Report")
+            st.dataframe(token_report_df)
+            
+            st.write("Token Summary")
+            st.json({
+                "total_chunks": len(chunks),
+                "min_tokens": int(token_report_df["token_count"].min()),
+                "max_tokens": int(token_report_df["token_count"].max()),
+                "avg_tokens": round(float(token_report_df["token_count"].mean()), 2),
+                "chunks_above_512": int((token_report_df["token_count"] > 512).sum())
+            })
 
             if chunks:
                 st.write("First chunk metadata:")
