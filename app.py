@@ -6,6 +6,9 @@ from src.serper_search import search_serper
 from src.web_extractor import extract_content
 from src.document_processor import process_extracted_content
 #from src.token_utils import get_chunk_token_report #(Token Size ~ Chunk size comparation)
+#from src.embedding_debugger import get_embedding_debug_dataframe #(for embedding debugging)
+from src.embedding_debugger import save_embedding_debug_csv #(for embedding debugging)
+from src.vector_store import get_embedding_model #(for embedding debugging)
 
 from datetime import datetime
 
@@ -170,6 +173,31 @@ if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
         with st.spinner("Creating embeddings and saving FAISS vector store..."):
 
             topic_folder = create_topic_folder(st.session_state["query"])
+
+            
+            # ==========================================
+            # EMBEDDING DEBUGGING SECTION
+            # ==========================================
+
+            embedding_model = get_embedding_model()
+
+            embedding_debug_csv_path, embedding_debug_df = save_embedding_debug_csv(
+                chunks=st.session_state["all_chunks"],
+                embeddings_model=embedding_model,
+                save_folder=topic_folder
+            )
+            
+            st.subheader("Embedding Debug Information")
+            
+            st.dataframe(
+                embedding_debug_df.head(),
+                use_container_width=True
+            )
+            
+            st.success("Full embedding debug CSV saved successfully.")
+            st.code(embedding_debug_csv_path)
+            
+            
 
             vector_store = create_and_save_vector_store(
                 chunks=st.session_state["all_chunks"],
