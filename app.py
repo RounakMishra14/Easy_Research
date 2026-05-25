@@ -9,19 +9,24 @@ from src.document_processor import process_extracted_content
 #from src.embedding_debugger import get_embedding_debug_dataframe #(for embedding debugging)
 from src.embedding_debugger import save_embedding_debug_csv #(for embedding debugging)
 from src.vector_store import get_embedding_model #(for embedding debugging)
-
 from datetime import datetime
-
 from src.history_manager import (
     create_topic_folder,
     save_metadata,
     list_research_history
 )
-
 from src.vector_store import (
     create_and_save_vector_store,
     load_vector_store
 )
+from src.retriever import (
+    retrieve_relevant_chunks,
+    format_retrieved_chunks_for_display
+)
+
+from src.answer_generator import generate_answer_from_chunks
+
+from src.file_ingestor import create_extracted_item_from_file
 
 
 st.set_page_config(
@@ -166,6 +171,54 @@ if st.button("Run Module Test"):
         f"Processing completed. Total chunks collected from all URLs: {len(all_chunks)}"
     )
 
+# =========================
+# FILE INGESTION TEST SECTION
+# =========================
+
+st.divider()
+
+st.subheader("Optional: File Ingestion Test")
+
+uploaded_file = st.file_uploader(
+    "Upload a file",
+    type=["txt"]
+)
+
+if uploaded_file is not None:
+
+    st.success(f"File uploaded: {uploaded_file.name}")
+
+    if st.button("Process Uploaded File"):
+
+        with st.spinner("Processing uploaded file using existing chunking logic..."):
+
+            file_extracted_item = create_extracted_item_from_file(
+                uploaded_file
+            )
+
+            file_chunks = process_extracted_content(
+                file_extracted_item
+            )
+
+            st.session_state["all_chunks"] = file_chunks
+            st.session_state["successful_documents"] = [file_extracted_item]
+            st.session_state["query"] = f"file_{uploaded_file.name}"
+
+        st.success(
+            f"File processing completed. Total chunks created: {len(file_chunks)}"
+        )
+
+        if file_chunks:
+            st.write("First file chunk metadata:")
+            st.json(file_chunks[0].metadata)
+
+            st.text_area(
+                "First File Chunk Preview",
+                file_chunks[0].page_content[:1500],
+                height=250,
+                key="file_first_chunk_preview"
+            )
+
 
 if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
 
@@ -178,7 +231,7 @@ if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
             # ==========================================
             # EMBEDDING DEBUGGING SECTION
             # ==========================================
-
+            '''
             embedding_model = get_embedding_model()
 
             embedding_debug_csv_path, embedding_debug_df = save_embedding_debug_csv(
@@ -196,7 +249,7 @@ if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
             
             st.success("Full embedding debug CSV saved successfully.")
             st.code(embedding_debug_csv_path)
-            
+            '''
             
 
             vector_store = create_and_save_vector_store(
@@ -221,3 +274,124 @@ if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
             st.success("Embeddings created and saved successfully.")
             st.code(topic_folder)
             st.rerun()
+
+# =========================
+# RETRIEVAL TEST SECTION
+# =========================
+
+if "vector_store" in st.session_state:
+
+    st.subheader("Step 5: Test Retrieval from FAISS")
+
+    user_question = st.text_input(
+        "Ask a question from the loaded/saved research data"
+    )
+
+    top_k = st.slider(
+        "Number of chunks to retrieve",
+        min_value=1,
+        max_value=10,
+        value=5
+    )
+
+    if st.button("Retrieve Relevant Chunks"):
+
+        retrieved_chunks = retrieve_relevant_chunks(
+            vector_store=st.session_state["vector_store"],
+            question=user_question,
+            k=top_k
+        )
+
+        st.session_state["retrieved_chunks"] = retrieved_chunks
+
+        display_rows = format_retrieved_chunks_for_display(
+            retrieved_chunks
+        )
+
+        st.subheader("Retrieved Chunks Summary")
+        st.dataframe(display_rows, use_container_width=True)
+
+        st.subheader("Detailed Retrieved Chunks")
+
+        for item in retrieved_chunks:
+            st.markdown(f"### Rank {item['rank']}")
+            st.write(f"Score: {item['score']}")
+            st.write(f"Title: {item['title']}")
+            st.write(f"URL: {item['url']}")
+
+            st.text_area(
+                "Chunk Content",
+                item["content"],
+                height=250,
+                key=f"retrieved_chunk_{item['rank']}"
+            )
+
+            st.divider()
+
+
+# =========================
+# ANSWER GENERATION SECTION
+# =========================
+
+if "vector_store" in st.session_state:
+
+    st.subheader("Step 6: Ask Questions from Research Database")
+
+    user_question = st.text_input(
+        "Ask a question from your research database"
+    )
+
+    top_k = st.slider(
+        "Top chunks to retrieve",
+        min_value=1,
+        max_value=10,
+        value=5
+    )
+
+    if st.button("Generate Answer from Research DB"):
+
+        if not user_question.strip():
+            st.warning("Please enter a question.")
+            st.stop()
+
+        with st.spinner("Retrieving relevant chunks..."):
+
+            retrieved_chunks = retrieve_relevant_chunks(
+                vector_store=st.session_state["vector_store"],
+                question=user_question,
+                k=top_k
+            )
+
+        st.session_state["retrieved_chunks"] = retrieved_chunks
+
+        st.subheader("Retrieved Chunks")
+
+        for item in retrieved_chunks:
+
+            st.markdown(f"### Rank {item['rank']}")
+
+            st.write(f"Similarity Score: {item['score']}")
+
+            st.write(f"Title: {item['title']}")
+
+            st.write(f"URL: {item['url']}")
+
+            st.text_area(
+                "Retrieved Chunk",
+                item["content"][:2000],
+                height=250,
+                key=f"retrieved_{item['rank']}"
+            )
+
+            st.divider()
+
+        with st.spinner("Generating final answer using Gemini..."):
+
+            final_answer = generate_answer_from_chunks(
+                question=user_question,
+                retrieved_chunks=retrieved_chunks
+            )
+
+        st.subheader("Final Answer")
+
+        st.write(final_answer)

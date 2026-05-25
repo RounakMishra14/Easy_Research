@@ -1,12 +1,12 @@
 import os
 from dotenv import load_dotenv
 
-
 # Load variables from .env file
 load_dotenv()
 
 
 SERPER_API_KEY = os.getenv("SERPER_API_KEY") #or st.secrets.get("SERPER_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 DEFAULT_NUM_RESULTS = 10
