@@ -12,12 +12,21 @@ def create_document(extracted_item: dict):
     if not content:
         return None
 
-    metadata = {
+    """metadata = {
         "title": extracted_item.get("title"),
         "url": extracted_item.get("url"),
         "snippet": extracted_item.get("snippet"),
         "extraction_method": extracted_item.get("extraction_method"),
         "source_type": "web"
+    }"""
+    metadata = {
+    "title": extracted_item.get("title"),
+    "url": extracted_item.get("url"),
+    "snippet": extracted_item.get("snippet"),
+    "extraction_method": extracted_item.get("extraction_method"),
+    "source_type": extracted_item.get("source_type", "web"),
+    "video_id": extracted_item.get("video_id"),
+    "file_name": extracted_item.get("file_name"),
     }
 
     return Document(

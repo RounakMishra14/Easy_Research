@@ -28,6 +28,10 @@ from src.answer_generator import generate_answer_from_chunks
 
 from src.file_ingestor import create_extracted_item_from_file
 
+from src.youtube_loader import create_extracted_item_from_youtube
+
+from src.pdf_loader import create_extracted_item_from_pdf
+
 
 st.set_page_config(
     page_title="Easy Answer - Module Test",
@@ -218,6 +222,127 @@ if uploaded_file is not None:
                 height=250,
                 key="file_first_chunk_preview"
             )
+
+
+# =========================
+# YOUTUBE TRANSCRIPT SECTION
+# =========================
+
+st.divider()
+
+st.subheader("Optional: YouTube Transcript Ingestion Test")
+
+youtube_url = st.text_input("Enter YouTube URL")
+
+if st.button("Process YouTube Video"):
+
+    if not youtube_url.strip():
+        st.warning("Please enter a YouTube URL.")
+        st.stop()
+
+    try:
+        with st.spinner("Fetching YouTube transcript and processing using existing chunking logic..."):
+
+            youtube_extracted_item = create_extracted_item_from_youtube(
+                youtube_url
+            )
+
+            youtube_chunks = process_extracted_content(
+                youtube_extracted_item
+            )
+
+            st.session_state["all_chunks"] = youtube_chunks
+            st.session_state["successful_documents"] = [youtube_extracted_item]
+            st.session_state["query"] = f"youtube_{youtube_extracted_item['video_id']}"
+
+        st.success(
+            f"YouTube processing completed. Total chunks created: {len(youtube_chunks)}"
+        )
+
+        st.write("Video ID:")
+        st.code(youtube_extracted_item["video_id"])
+
+        st.text_area(
+            "Transcript Preview",
+            youtube_extracted_item["content"][:3000],
+            height=300
+        )
+
+        if youtube_chunks:
+            st.write("First YouTube chunk metadata:")
+            st.json(youtube_chunks[0].metadata)
+
+            st.text_area(
+                "First YouTube Chunk Preview",
+                youtube_chunks[0].page_content[:1500],
+                height=250,
+                key="youtube_first_chunk_preview"
+            )
+
+    except Exception as e:
+        st.error(str(e))
+
+
+
+# =========================
+# PDF FILE INGESTION SECTION
+# =========================
+
+st.divider()
+
+st.subheader("Optional: PDF File Ingestion Test")
+
+uploaded_pdf = st.file_uploader(
+    "Upload a PDF file",
+    type=["pdf"],
+    key="pdf_file_uploader"
+)
+
+if st.button("Process PDF File"):
+
+    if uploaded_pdf is None:
+        st.warning("Please upload a PDF file.")
+        st.stop()
+
+    try:
+        with st.spinner("Extracting PDF text. OCR will be used if normal text is not found..."):
+
+            pdf_extracted_item = create_extracted_item_from_pdf(uploaded_pdf)
+
+            pdf_chunks = process_extracted_content(
+                pdf_extracted_item
+            )
+
+            st.session_state["all_chunks"] = pdf_chunks
+            st.session_state["successful_documents"] = [pdf_extracted_item]
+            st.session_state["query"] = f"pdf_{uploaded_pdf.name}"
+
+        st.success(
+            f"PDF processing completed. Total chunks created: {len(pdf_chunks)}"
+        )
+
+        st.write("Extraction method used:")
+        st.code(pdf_extracted_item["extraction_method"])
+
+        st.text_area(
+            "PDF Text Preview",
+            pdf_extracted_item["content"][:3000],
+            height=300
+        )
+
+        if pdf_chunks:
+            st.write("First PDF chunk metadata:")
+            st.json(pdf_chunks[0].metadata)
+
+            st.text_area(
+                "First PDF Chunk Preview",
+                pdf_chunks[0].page_content[:1500],
+                height=250,
+                key="pdf_first_chunk_preview"
+            )
+
+    except Exception as e:
+        st.error(str(e))
 
 
 if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
