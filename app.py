@@ -345,6 +345,83 @@ if st.button("Process PDF File"):
         st.error(str(e))
 
 
+# =========================
+# MANUAL URL INGESTION SECTION
+# =========================
+
+st.divider()
+st.subheader("Optional: Manual URL Ingestion")
+
+if "manual_urls" not in st.session_state:
+    st.session_state["manual_urls"] = [""]
+
+for i in range(len(st.session_state["manual_urls"])):
+    st.session_state["manual_urls"][i] = st.text_input(
+        f"URL {i + 1}",
+        value=st.session_state["manual_urls"][i],
+        key=f"manual_url_{i}"
+    )
+
+if st.button("Add Another URL"):
+    st.session_state["manual_urls"].append("")
+    st.rerun()
+
+if st.button("Process Manual URLs"):
+
+    urls = [
+        url.strip()
+        for url in st.session_state["manual_urls"]
+        if url.strip()
+    ]
+
+    if not urls:
+        st.warning("Please enter at least one URL.")
+        st.stop()
+
+    all_url_chunks = []
+    successful_documents = []
+
+    for idx, url in enumerate(urls, start=1):
+
+        with st.spinner(f"Extracting URL {idx}..."):
+
+            extracted_item = asyncio.run(
+                extract_content(
+                    url=url,
+                    title=f"Manual URL {idx}",
+                    snippet="User provided URL"
+                )
+            )
+
+        if extracted_item["content"]:
+
+            chunks = process_extracted_content(extracted_item)
+
+            all_url_chunks.extend(chunks)
+            successful_documents.append(extracted_item)
+
+            st.success(
+                f"URL {idx} processed successfully. Chunks created: {len(chunks)}"
+            )
+
+            st.write("Extraction method:")
+            st.code(extracted_item["extraction_method"])
+
+            st.write("URL:")
+            st.code(url)
+
+        else:
+            st.error(f"Could not extract content from URL {idx}: {url}")
+
+    st.session_state["all_chunks"] = all_url_chunks
+    st.session_state["successful_documents"] = successful_documents
+    st.session_state["query"] = "manual_urls"
+
+    st.success(
+        f"Manual URL ingestion completed. Total documents: {len(successful_documents)}, total chunks: {len(all_url_chunks)}"
+    )
+
+
 if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
 
     if st.button("Create and Save Embeddings"):
