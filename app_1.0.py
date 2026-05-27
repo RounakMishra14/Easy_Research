@@ -43,7 +43,19 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 Easy Answer - Multi Source Research DB")
+st.title("🧠 Easy Answer ")
+
+
+# =========================
+# RESET / WIDGET KEY VERSION
+# =========================
+
+if "reset_counter" not in st.session_state:
+    st.session_state["reset_counter"] = 0
+
+
+def widget_key(name):
+    return f"{name}_{st.session_state['reset_counter']}"
 
 
 # =========================
@@ -85,12 +97,39 @@ def reset_loaded_data():
         "dataset_id",
         "vector_store",
         "selected_history",
-        "retrieved_chunks"
+        "retrieved_chunks",
+        "youtube_urls",
+        "manual_urls",
     ]
 
-    for key in keys_to_clear:
-        if key in st.session_state:
+    widget_prefixes_to_clear = [
+        "research_name",
+        "use_web_search",
+        "use_txt_files",
+        "use_pdf_files",
+        "use_youtube",
+        "use_manual_urls",
+        "web_search_query",
+        "web_search_num_results",
+        "txt_file_uploader",
+        "pdf_file_uploader",
+        "youtube_url_",
+        "manual_url_",
+        "retrieval_question",
+        "retrieval_top_k",
+        "answer_question",
+        "answer_top_k",
+    ]
+
+    for key in list(st.session_state.keys()):
+        if key in keys_to_clear or any(key.startswith(prefix) for prefix in widget_prefixes_to_clear):
             del st.session_state[key]
+
+    st.session_state["youtube_urls"] = [""]
+    st.session_state["manual_urls"] = [""]
+
+    # This forces Streamlit to rebuild file uploaders, checkboxes and inputs.
+    st.session_state["reset_counter"] += 1
 
 
 # =========================
@@ -112,9 +151,7 @@ if history:
         vector_store = load_vector_store(selected_history["folder_path"])
         st.session_state["vector_store"] = vector_store
         st.session_state["selected_history"] = selected_history
-
         st.sidebar.success("Vector DB loaded successfully.")
-
 else:
     st.sidebar.info("No previous research history found.")
 
@@ -143,25 +180,26 @@ st.header("Step 1: Choose Data Sources")
 
 research_name = st.text_input(
     "Enter a name for this research database",
-    value="combined_research_db"
+    value="combined_research_db",
+    key=widget_key("research_name")
 )
 
 col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
-    use_web_search = st.checkbox("Web Search")
+    use_web_search = st.checkbox("Web Search", key=widget_key("use_web_search"))
 
 with col2:
-    use_txt_files = st.checkbox("TXT Files")
+    use_txt_files = st.checkbox("TXT Files", key=widget_key("use_txt_files"))
 
 with col3:
-    use_pdf_files = st.checkbox("PDF Files")
+    use_pdf_files = st.checkbox("PDF Files", key=widget_key("use_pdf_files"))
 
 with col4:
-    use_youtube = st.checkbox("YouTube URLs")
+    use_youtube = st.checkbox("YouTube URLs", key=widget_key("use_youtube"))
 
 with col5:
-    use_manual_urls = st.checkbox("Manual URLs")
+    use_manual_urls = st.checkbox("Manual URLs", key=widget_key("use_manual_urls"))
 
 
 # =========================
@@ -174,7 +212,7 @@ if use_web_search:
     web_query = st.text_input(
         "Enter search query",
         value="latest AI agents",
-        key="web_search_query"
+        key=widget_key("web_search_query")
     )
 
     num_results = st.slider(
@@ -182,7 +220,7 @@ if use_web_search:
         min_value=1,
         max_value=10,
         value=3,
-        key="web_search_num_results"
+        key=widget_key("web_search_num_results")
     )
 else:
     web_query = ""
@@ -200,7 +238,7 @@ if use_txt_files:
         "Upload TXT files",
         type=["txt"],
         accept_multiple_files=True,
-        key="txt_file_uploader"
+        key=widget_key("txt_file_uploader")
     )
 else:
     uploaded_txt_files = []
@@ -217,7 +255,7 @@ if use_pdf_files:
         "Upload PDF files",
         type=["pdf"],
         accept_multiple_files=True,
-        key="pdf_file_uploader"
+        key=widget_key("pdf_file_uploader")
     )
 else:
     uploaded_pdf_files = []
@@ -237,10 +275,10 @@ if use_youtube:
         st.session_state["youtube_urls"][i] = st.text_input(
             f"YouTube URL {i + 1}",
             value=st.session_state["youtube_urls"][i],
-            key=f"youtube_url_{i}"
+            key=widget_key(f"youtube_url_{i}")
         )
 
-    if st.button("Add Another YouTube URL"):
+    if st.button("Add Another YouTube URL", key=widget_key("add_youtube_url_btn")):
         st.session_state["youtube_urls"].append("")
         st.rerun()
 
@@ -259,10 +297,10 @@ if use_manual_urls:
         st.session_state["manual_urls"][i] = st.text_input(
             f"Manual URL {i + 1}",
             value=st.session_state["manual_urls"][i],
-            key=f"manual_url_{i}"
+            key=widget_key(f"manual_url_{i}")
         )
 
-    if st.button("Add Another Manual URL"):
+    if st.button("Add Another Manual URL", key=widget_key("add_manual_url_btn")):
         st.session_state["manual_urls"].append("")
         st.rerun()
 
@@ -561,24 +599,6 @@ if "all_chunks" in st.session_state and st.session_state["all_chunks"]:
 
             topic_folder = create_topic_folder(st.session_state["query"])
 
-            # ==========================================
-            # OPTIONAL EMBEDDING DEBUGGING SECTION
-            # ==========================================
-            """
-            embedding_model = get_embedding_model()
-
-            embedding_debug_csv_path, embedding_debug_df = save_embedding_debug_csv(
-                chunks=st.session_state["all_chunks"],
-                embeddings_model=embedding_model,
-                save_folder=topic_folder
-            )
-
-            st.subheader("Embedding Debug Information")
-            st.dataframe(embedding_debug_df.head(), use_container_width=True)
-            st.success("Full embedding debug CSV saved successfully.")
-            st.code(embedding_debug_csv_path)
-            """
-
             vector_store = create_and_save_vector_store(
                 chunks=st.session_state["all_chunks"],
                 save_path=topic_folder
@@ -625,7 +645,7 @@ if "vector_store" in st.session_state:
 
     retrieval_question = st.text_input(
         "Ask a question to retrieve relevant chunks",
-        key="retrieval_question"
+        key=widget_key("retrieval_question")
     )
 
     retrieval_top_k = st.slider(
@@ -633,7 +653,7 @@ if "vector_store" in st.session_state:
         min_value=1,
         max_value=10,
         value=5,
-        key="retrieval_top_k"
+        key=widget_key("retrieval_top_k")
     )
 
     if st.button("Retrieve Relevant Chunks"):
@@ -690,7 +710,7 @@ if "vector_store" in st.session_state:
 
     answer_question = st.text_input(
         "Ask a question from your research database",
-        key="answer_question"
+        key=widget_key("answer_question")
     )
 
     answer_top_k = st.slider(
@@ -698,7 +718,7 @@ if "vector_store" in st.session_state:
         min_value=1,
         max_value=10,
         value=5,
-        key="answer_top_k"
+        key=widget_key("answer_top_k")
     )
 
     if st.button("Generate Answer from Research DB"):
@@ -758,7 +778,7 @@ if "vector_store" in st.session_state:
 
 st.divider()
 
-if st.button("Reset Current Session Data"):
+if st.button("Clear Recent Data", key=widget_key("clear_recent_data_btn")):
     reset_loaded_data()
-    st.success("Current session data cleared.")
+    st.success("All recent data cleared. App reset to initial state.")
     st.rerun()
