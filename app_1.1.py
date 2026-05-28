@@ -43,6 +43,11 @@ from src.input_parser import (
     extract_urls_and_queries,
 )
 
+from src.chat_history_manager import (
+    load_chat_history,
+    append_chat_message,
+)
+
 
 
 # =====================================================
@@ -292,7 +297,8 @@ if not st.session_state["db_mode_selected"]:
                 st.session_state["query"] = selected_existing_db["topic"]
                 st.session_state["active_topic_folder"] = selected_existing_db["folder_path"]
                 st.session_state["vector_store"] = vector_store
-                st.session_state["qa_history"] = []
+                #st.session_state["qa_history"] = []
+                st.session_state["qa_history"] = load_chat_history(selected_existing_db["folder_path"])
 
                 st.rerun()
 
@@ -343,7 +349,8 @@ if history:
         st.session_state["query"] = selected_history["topic"]
         st.session_state["active_db_name"] = selected_history["topic"]
         st.session_state["active_topic_folder"] = selected_history["folder_path"]
-        st.session_state["qa_history"] = []
+        #st.session_state["qa_history"] = []
+        st.session_state["qa_history"] = load_chat_history(selected_history["folder_path"])
         st.rerun()
 
     # =====================================================
@@ -797,12 +804,17 @@ if "vector_store" in st.session_state:
         progress_bar.progress(100)
         status_text.success("Answer generated.")
 
-        st.session_state["qa_history"].append(
-            {
-                "question": answer_question,
-                "answer": final_answer,
-                "time": datetime.now().strftime("%d.%m.%Y - %I:%M %p"),
-            }
+        #st.session_state["qa_history"].append(
+        #    {
+        #        "question": answer_question,
+        #        "answer": final_answer,
+        #        "time": datetime.now().strftime("%d.%m.%Y - %I:%M %p"),
+        #    }
+        #)
+        st.session_state["qa_history"] = append_chat_message(
+        folder_path=st.session_state.get("active_topic_folder"),
+        question=answer_question,
+        answer=final_answer,
         )
 
         st.rerun()
