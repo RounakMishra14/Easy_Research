@@ -2,6 +2,7 @@ import os
 import re
 import json
 from datetime import datetime
+import shutil
 
 
 BASE_VECTOR_DIR = "vector_store"
@@ -71,3 +72,22 @@ def list_research_history():
     )
 
     return history
+
+
+def delete_research_database(folder_path: str) -> bool:
+    """
+    Delete one complete research database folder.
+    """
+
+    if not folder_path:
+        raise ValueError("No database folder path provided.")
+
+    if not os.path.exists(folder_path):
+        raise FileNotFoundError(f"Database folder not found: {folder_path}")
+
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"Path is not a folder: {folder_path}")
+
+    shutil.rmtree(folder_path)
+
+    return True

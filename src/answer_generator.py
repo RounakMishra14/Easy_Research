@@ -103,7 +103,7 @@ Final Answer:
 import os
 import requests
 from dotenv import load_dotenv
-
+from src.conversation_memory import get_recent_answers_context
 load_dotenv()
 
 
@@ -139,7 +139,7 @@ def build_rag_prompt(question, retrieved_chunks):
     """
 
     context = build_context_from_chunks(retrieved_chunks)
-
+    recent_context = get_recent_answers_context()
     prompt = f"""
 You are an advanced AI research assistant.
 
@@ -166,6 +166,8 @@ Write the answer here using citations like [1], [2].
 [1] Title - URL
 [2] Title - URL
 
+Conversation Memory:
+{recent_context}
 
 User Question:
 {question}
@@ -194,7 +196,8 @@ def generate_with_gemini(prompt, model_name=None):
 
     model_name = model_name or os.getenv(
         "GEMINI_MODEL",
-        "gemini-3.5-flash"#gemini-2.5-flash-lite"
+        "gemini-2.5-flash-lite"
+        #"gemini-3.5-flash"
     )
 
     client = genai.Client(api_key=api_key)
